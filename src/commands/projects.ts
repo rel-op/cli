@@ -633,7 +633,7 @@ async function handleTopPersistent(cmd: Command): Promise<void> {
   )
 
   if (output.isStructuredFormat(outputFormat)) {
-    output.outputApiResult({ data: result.data }, outputFormat)
+    output.outputApiResult({ data: result.data, meta: result.meta }, outputFormat)
     return
   }
 
