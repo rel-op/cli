@@ -70,6 +70,24 @@ interface CandlesData {
   candles: (number | null)[][]
 }
 
+interface PersistenceData {
+  projectId: string
+  projectName: string
+  ticker: string | null
+  rankNow: number | null
+  bestRank: number | null
+  hoursTop5: number
+  hoursTop10: number
+  hoursTop25: number
+  entryCountTop10: number
+  entryCountTop25: number
+  isTop10Now: boolean
+  isTop25Now: boolean
+  persistenceScore: number
+  rationale: string | null
+  metrics: Record<string, unknown> | null
+}
+
 // -- Table column definitions --
 
 const PROJECT_LIST_COLUMNS: output.TableColumn[] = [
@@ -132,6 +150,58 @@ const RANK_COLUMNS: output.TableColumn[] = [
     width: 8,
     align: 'right' as const,
     format: (v: unknown) => (typeof v === 'number' ? v.toFixed(3) : '-'),
+  },
+]
+
+const PERSISTENCE_COLUMNS: output.TableColumn[] = [
+  {
+    key: 'rank',
+    header: '#',
+    width: 3,
+    align: 'right' as const,
+  },
+  {
+    key: 'name',
+    header: 'Project',
+  },
+  {
+    key: 'rankNow',
+    header: 'Now',
+    width: 5,
+    align: 'right' as const,
+    format: (v: unknown) => (typeof v === 'number' ? String(v) : '-'),
+  },
+  {
+    key: 'best',
+    header: 'Best',
+    width: 5,
+    align: 'right' as const,
+    format: (v: unknown) => (typeof v === 'number' ? String(v) : '-'),
+  },
+  {
+    key: 'top10h',
+    header: 'T10h',
+    width: 6,
+    align: 'right' as const,
+    format: (v: unknown) => (typeof v === 'number' ? v.toFixed(1) : '-'),
+  },
+  {
+    key: 'top25h',
+    header: 'T25h',
+    width: 6,
+    align: 'right' as const,
+    format: (v: unknown) => (typeof v === 'number' ? v.toFixed(1) : '-'),
+  },
+  {
+    key: 'score',
+    header: 'PScore',
+    width: 7,
+    align: 'right' as const,
+    format: (v: unknown) => (typeof v === 'number' ? v.toFixed(1) : '-'),
+  },
+  {
+    key: 'rationale',
+    header: 'Rationale',
   },
 ]
 
@@ -206,6 +276,20 @@ export function registerProjectsCommand(program: Command): void {
     .option('--at <date>', 'Snapshot at a past time (ISO 8601 or relative: -24h, -7d)')
     .action(async (id: string, _opts: unknown, cmd: Command) => {
       await handleCandles(id, cmd)
+    })
+
+  // -- top subcommand group --
+  const top = projects
+    .command('top')
+    .description('Leaderboard views')
+
+  top
+    .command('persistent')
+    .description('Projects ranked by sustained leaderboard presence')
+    .option('--hours <n>', 'Lookback window in hours (default 24, max 168)', '24')
+    .option('--limit <n>', 'Number of projects (default 10, max 50)', '10')
+    .action(async (_opts: unknown, cmd: Command) => {
+      await handleTopPersistent(cmd)
     })
 }
 
@@ -524,6 +608,50 @@ async function handleChains(cmd: Command): Promise<void> {
   console.log()
   output.dim(`${chains.length} chain${chains.length === 1 ? '' : 's'} available`)
 
+}
+
+async function handleTopPersistent(cmd: Command): Promise<void> {
+  const { clientOpts, authMode, outputFormat } = getClientOptions(cmd)
+  const opts = cmd.optsWithGlobals()
+
+  const params: Record<string, string | number | boolean | undefined> = {
+    hours: opts.hours as string,
+    limit: opts.limit as string,
+  }
+
+  const result = await output.withSpinner(
+    'Fetching persistence rankings...',
+    outputFormat,
+    () => withPayPerUse(
+      () => get<PersistenceData[]>('/v2/projects/top/persistent', params, clientOpts),
+      authMode,
+      reconstructCommand('aixbt projects top persistent', opts),
+      outputFormat,
+    ),
+    'Failed to fetch persistence rankings',
+    { silent: true },
+  )
+
+  if (output.isStructuredFormat(outputFormat)) {
+    output.outputApiResult({ data: result.data }, outputFormat)
+    return
+  }
+
+  const rows = result.data.map((p, i) => {
+    const ticker = p.ticker ? ` ${output.fmt.dim('$' + p.ticker.toUpperCase())}` : ''
+    return {
+      rank: i + 1,
+      name: `${p.projectName}${ticker}`,
+      rankNow: p.rankNow,
+      best: p.bestRank,
+      top10h: p.hoursTop10,
+      top25h: p.hoursTop25,
+      score: p.persistenceScore,
+      rationale: p.rationale ?? '-',
+    }
+  })
+
+  output.table(rows, PERSISTENCE_COLUMNS)
 }
 
 // -- Shared card builder --
