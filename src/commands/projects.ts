@@ -86,6 +86,7 @@ interface PersistenceData {
   persistenceScore: number
   rationale: string | null
   metrics: Record<string, unknown> | null
+  momentumContext?: Record<string, unknown>
 }
 
 // -- Table column definitions --
