@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.0
+## 0.4.1
 
 - **Breaking** — `--min-momentum-score` flag removed, replaced by `--min-spiking-score`
 - **Breaking** — `--signal-sort` flag removed, replaced by `--intel-sort`
