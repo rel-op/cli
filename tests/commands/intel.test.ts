@@ -65,6 +65,52 @@ const MOCK_INTEL = [
   },
 ]
 
+const MOCK_ENRICHED_INTEL = {
+  id: 'sig-enriched',
+  detectedAt: '2026-02-28T12:00:00Z',
+  reinforcedAt: '2026-03-01T08:00:00Z',
+  description: 'Long-form fallback description for enriched intel',
+  headline: 'Concise enriched headline',
+  projectName: 'Ethereum',
+  projectId: 'proj-eth',
+  category: 'DeFi',
+  hasOfficialSource: false,
+  observationCount: 3,
+  sentiment: 0.4,
+  citations: ['https://example.com/source'],
+  referencesMetrics: true,
+  metrics: {
+    usd: 3000,
+    usdMarketCap: 360000000000,
+    usd24hVol: 20000000000,
+    usd24hChange: 2.5,
+    lastUpdatedAt: 1709433600,
+  },
+  clusters: [
+    { id: 'c1', name: 'DeFi Trends' },
+  ],
+  activity: [
+    {
+      id: 'a1',
+      action: 'INITIAL_DETECTION',
+      date: '2026-02-28T12:00:00Z',
+      source: 'twitter',
+      clusters: [{ id: 'c1', name: 'DeFi Trends' }],
+      incoming: 'Initial enriched signal',
+      result: 'Long-form fallback description for enriched intel',
+      isOfficial: true,
+    },
+    {
+      id: 'a2',
+      action: 'ADD_CITATION',
+      date: '2026-03-01T08:00:00Z',
+      actor: { type: 'agent' },
+      citationEvidence: [{ id: 'citation-1', url: 'https://example.com/source' }],
+      changelog: 'added external citation',
+    },
+  ],
+}
+
 const MOCK_CLUSTERS = [
   {
     id: 'cluster-1',
@@ -162,6 +208,42 @@ describe('intel commands', () => {
       expect(jsonOutput).toBeDefined()
       const parsed = JSON.parse(jsonOutput!)
       expect(parsed.pagination).toEqual(pagination)
+    })
+
+    it('should include enriched fields in JSON output tiers', async () => {
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse(200, { status: 200, data: [MOCK_ENRICHED_INTEL] }),
+      )
+
+      const program = createProgram()
+      program.exitOverride()
+      await program.parseAsync(['node', 'aixbt', '--format', 'json', 'intel'], { from: 'node' })
+
+      const jsonOutput = logs.find(l => l.includes('Ethereum'))
+      expect(jsonOutput).toBeDefined()
+      const parsed = JSON.parse(jsonOutput!)
+      expect(parsed.data[0].headline).toBe('Concise enriched headline')
+      expect(parsed.data[0].observationCount).toBe(3)
+      expect(parsed.data[0].sentiment).toBe(0.4)
+      expect(parsed.data[0]).not.toHaveProperty('citations')
+      expect(parsed.data[0]).not.toHaveProperty('metrics')
+
+      logs = []
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse(200, { status: 200, data: [MOCK_ENRICHED_INTEL] }),
+      )
+      const verboseProgram = createProgram()
+      verboseProgram.exitOverride()
+      await verboseProgram.parseAsync(['node', 'aixbt', '--format', 'json', '-v', 'intel'], { from: 'node' })
+
+      const verboseOutput = logs.find(l => l.includes('Ethereum'))
+      expect(verboseOutput).toBeDefined()
+      const verboseParsed = JSON.parse(verboseOutput!)
+      expect(verboseParsed.data[0].citations).toEqual(['https://example.com/source'])
+      expect(verboseParsed.data[0].referencesMetrics).toBe(true)
+      expect(verboseParsed.data[0].metrics.usd).toBe(3000)
+      expect(verboseParsed.data[0].activity).toHaveLength(2)
+      expect(verboseParsed.data[0]).not.toHaveProperty('clusterCount')
     })
 
     it('should pass filter options as query params', async () => {
@@ -266,6 +348,40 @@ describe('intel commands', () => {
       expect(allOutput).toContain('Institutional')
       // Verbose hint shown
       expect(allOutput).toContain('-v')
+    })
+
+    it('should prefer headline and show observation count, sentiment, and citations', async () => {
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse(200, { status: 200, data: [MOCK_ENRICHED_INTEL] }),
+      )
+
+      const program = createProgram()
+      program.exitOverride()
+      await program.parseAsync(['node', 'aixbt', '-v', 'intel'], { from: 'node' })
+
+      const allOutput = logs.join('\n')
+      expect(allOutput).toContain('Concise enriched headline')
+      expect(allOutput).not.toContain('Long-form fallback description for enriched intel')
+      expect(allOutput).toContain('3 observations')
+      expect(allOutput).toContain('+')
+      expect(allOutput).toContain('https://example.com/source')
+    })
+
+    it('should render canonical activity entries without undefined text', async () => {
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse(200, { status: 200, data: [MOCK_ENRICHED_INTEL] }),
+      )
+
+      const program = createProgram()
+      program.exitOverride()
+      await program.parseAsync(['node', 'aixbt', '-v', 'intel'], { from: 'node' })
+
+      const allOutput = logs.join('\n')
+      expect(allOutput).toContain('activity')
+      expect(allOutput).toContain('Initial enriched signal')
+      expect(allOutput).toContain('added external citation')
+      expect(allOutput).toContain('DeFi Trends')
+      expect(allOutput).not.toContain('undefined')
     })
 
     it('should display OFFICIAL badge when hasOfficialSource is true', async () => {
