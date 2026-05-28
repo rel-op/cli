@@ -36,16 +36,20 @@ const MOCK_PROJECTS = [
     id: 'proj-1',
     name: 'Bitcoin',
     xHandle: 'bitcoin',
-    momentumScore: 85.5,
-    popularityScore: 100,
+    spikingScore: 85.5,
+    spikingScoreDelta: 1.2,
+    activeScore: 18,
+    climbingScore: 4.56,
     signals: [{ id: 's1', category: 'DeFi', description: 'Test signal' }],
   },
   {
     id: 'proj-2',
     name: 'Ethereum',
     xHandle: 'ethereum',
-    momentumScore: 72.3,
-    popularityScore: 95,
+    spikingScore: 72.3,
+    spikingScoreDelta: -0.5,
+    activeScore: 12,
+    climbingScore: 2.10,
     signals: [],
   },
 ]
@@ -55,8 +59,10 @@ const MOCK_PROJECT_DETAIL = {
   name: 'Bitcoin',
   xHandle: 'bitcoin',
   description: 'The first cryptocurrency',
-  momentumScore: 85.5,
-  popularityScore: 100,
+  spikingScore: 85.5,
+  spikingScoreDelta: 1.2,
+  activeScore: 18,
+  climbingScore: 4.56,
   metrics: {
     usd: 65000.123456,
     usdMarketCap: 1300000000000,
@@ -90,7 +96,7 @@ const MOCK_MOMENTUM = {
   data: [
     {
       timestamp: '2026-02-28T00:00:00Z',
-      momentumScore: 82.1,
+      spikingScore: 82.1,
       clusters: [
         { id: 'c1', name: 'DeFi Trends', count: 15 },
         { id: 'c2', name: 'Market Sentiment', count: 8 },
@@ -98,7 +104,7 @@ const MOCK_MOMENTUM = {
     },
     {
       timestamp: '2026-03-01T00:00:00Z',
-      momentumScore: 85.5,
+      spikingScore: 85.5,
       clusters: [{ id: 'c1', name: 'DeFi Trends', count: 20 }],
     },
   ],
@@ -155,7 +161,7 @@ describe('projects commands', () => {
       expect(callUrl.pathname).toBe('/v2/projects')
       expect(callUrl.searchParams.get('page')).toBe('1')
       expect(callUrl.searchParams.get('limit')).toBeNull()
-      expect(callUrl.searchParams.get('sortBy')).toBe('momentumScore')
+      expect(callUrl.searchParams.get('sortBy')).toBe('spikingScore')
 
       // Verify JSON output contains project data
       const jsonOutput = logs.find(l => l.includes('Bitcoin'))
@@ -190,13 +196,13 @@ describe('projects commands', () => {
       const program = createProgram()
       program.exitOverride()
       await program.parseAsync(
-        ['node', 'aixbt', '--format', 'json', 'projects', '--chain', 'ethereum', '--min-momentum-score', '50', '--limit', '10'],
+        ['node', 'aixbt', '--format', 'json', 'projects', '--chain', 'ethereum', '--min-spiking-score', '50', '--limit', '10'],
         { from: 'node' },
       )
 
       const callUrl = new URL(mockFetch.mock.calls[0][0] as string)
       expect(callUrl.searchParams.get('chain')).toBe('ethereum')
-      expect(callUrl.searchParams.get('minMomentumScore')).toBe('50')
+      expect(callUrl.searchParams.get('minSpikingScore')).toBe('50')
       expect(callUrl.searchParams.get('limit')).toBe('10')
     })
 
@@ -276,7 +282,9 @@ describe('projects commands', () => {
       expect(allOutput).toContain('ID')
       expect(allOutput).toContain('proj-1')
       expect(allOutput).toContain('Score')
-      expect(allOutput).toContain('Popularity')
+      expect(allOutput).toContain('Active')
+      expect(allOutput).toContain('Climbing')
+      expect(allOutput).toContain('4.56')
       expect(allOutput).toContain('X Handle')
       expect(allOutput).toContain('@bitcoin')
       expect(allOutput).toContain('Description')

@@ -12,7 +12,7 @@ import { fmt, wrapIndented } from '../output.js'
 const AGENT_SYSTEM_PROMPT = [
   'You are analyzing AIXBT recipe output.',
   'AIXBT is a crypto intelligence platform that tracks discussions on X.',
-  'It organizes tracked accounts into clusters (independent community segments via social graph analysis), detects intel (discrete verified facts about projects, not opinions), and scores momentum (rate of new cluster convergence, measuring breadth of attention, not volume).',
+  'It organizes tracked accounts into clusters (independent community segments via social graph analysis), detects intel (discrete verified facts about projects, not opinions), and scores projects on three dimensions: spiking (real-time cluster convergence), active (mention hours in 24h), and climbing (sustained 72h growth).',
   'When using tools, briefly describe what you are about to do (e.g. "Reading intel data").',
   'Once all tool calls are complete and you begin your final response, go straight into the analysis.',
   'No preamble, no "here is the analysis", no summary of what you just read — just the analysis itself.',

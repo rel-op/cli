@@ -124,17 +124,20 @@ async function handleIntelList(cmd: Command): Promise<void> {
     const s = result.data[i]
     if (i > 0) console.log()
 
-    // Title line: name  CATEGORY  [HOT] [OFFICIAL]
+    // Title line: name  CATEGORY  [HOT] [OFFICIAL]  sentiment
     const badge = buildBadges(s)
     const badgePart = badge ? ` ${badge}` : ''
-    console.log(`${output.fmt.boldWhite(s.projectName)}  ${output.fmt.tag(s.category || 'UNCATEGORIZED')}${badgePart}`)
+    const sentimentPart = typeof s.sentiment === 'number'
+      ? (s.sentiment >= 0.25 ? ` ${output.fmt.green('+')}` : s.sentiment <= -0.25 ? ` ${output.fmt.red('-')}` : '')
+      : ''
+    console.log(`${output.fmt.boldWhite(s.projectName)}  ${output.fmt.tag(s.category || 'UNCATEGORIZED')}${badgePart}${sentimentPart}`)
 
-    // Description
-    console.log(s.description)
+    // Description (prefer headline)
+    console.log(s.headline ?? s.description)
 
     // Meta line
-    const updates = s.activity?.length ?? 0
-    console.log(output.fmt.dim(`Detected ${output.timeAgo(s.detectedAt)} · Reinforced ${output.timeAgo(s.reinforcedAt)} · ${updates} update${updates !== 1 ? 's' : ''}`))
+    const updates = s.observationCount ?? 0
+    console.log(output.fmt.dim(`Detected ${output.timeAgo(s.detectedAt)} · Reinforced ${output.timeAgo(s.reinforcedAt)} · ${updates} observation${updates !== 1 ? 's' : ''}`))
 
     // Cluster dots
     const clusterTags = (s.clusters ?? []).map(c =>
@@ -142,7 +145,7 @@ async function handleIntelList(cmd: Command): Promise<void> {
     ).join('  ')
     if (clusterTags) console.log(clusterTags)
 
-    // Verbose: ID + activity (only when reinforced, i.e. >1 update)
+    // Verbose: ID + activity (only when reinforced, i.e. >1 update) + citations
     if (verbosity >= 1) {
       console.log(output.fmt.dim(`ID: ${s.id}`))
       if ((s.activity?.length ?? 0) > 1) {
@@ -151,6 +154,11 @@ async function handleIntelList(cmd: Command): Promise<void> {
         for (let j = 0; j < entries.length; j++) {
           if (j > 0) console.log()
           console.log(entries[j])
+        }
+      }
+      if (s.citations && s.citations.length > 0) {
+        for (const url of s.citations) {
+          console.log(output.fmt.dim(`  ↳ ${url}`))
         }
       }
     }
@@ -243,18 +251,23 @@ function filterIntelFields(s: SignalData, verbosity: number): Record<string, unk
     projectName: s.projectName,
     category: s.category,
     description: s.description,
+    headline: s.headline,
     detectedAt: s.detectedAt,
     reinforcedAt: s.reinforcedAt,
+    observationCount: s.observationCount,
+    sentiment: s.sentiment,
     clusterCount: s.clusters?.length ?? 0,
   }
 
-  // v1: + identifiers, full clusters, official source, activity
   if (verbosity >= 1) {
     result.id = s.id
     result.projectId = s.projectId
     result.clusters = s.clusters
     result.hasOfficialSource = s.hasOfficialSource
     result.activity = s.activity
+    result.citations = s.citations
+    result.referencesMetrics = s.referencesMetrics
+    result.metrics = s.metrics
     delete result.clusterCount
   }
 

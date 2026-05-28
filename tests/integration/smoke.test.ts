@@ -206,8 +206,8 @@ describe('E2E smoke tests', () => {
 
   describe('projects --json with mocked API', () => {
     const MOCK_PROJECTS = [
-      { id: 'proj-1', name: 'Bitcoin', momentumScore: 85.5, signals: [] },
-      { id: 'proj-2', name: 'Ethereum', momentumScore: 72.3, signals: [] },
+      { id: 'proj-1', name: 'Bitcoin', spikingScore: 85.5, signals: [] },
+      { id: 'proj-2', name: 'Ethereum', spikingScore: 72.3, signals: [] },
     ]
 
     it('should output project data as JSON and call API with correct headers', async () => {

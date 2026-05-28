@@ -10,15 +10,38 @@ import { renderCandlestickChart } from '../lib/chart.js'
 
 // -- Response types --
 
+interface LeaderboardEntry {
+  enteredAt: string | null
+  currentHours: number | null
+  wasYesterday: boolean | null
+  entryCount24h: number | null
+  stabilityLabel: 'flash' | 'fresh' | 'persistent' | 'durable' | null
+}
+
+interface MomentumContext {
+  trajectory: 'rising' | 'decaying' | 'stable' | 'new' | null
+  distinctClusters: number | null
+  peakRank48h: number | null
+  bestRank14d: number | null
+  rankedSince: string | null
+  leaderboard?: {
+    top10: LeaderboardEntry
+    top25: LeaderboardEntry
+  }
+}
+
 interface ProjectData {
   id: string
   name: string
   description?: string
   rationale?: string
   xHandle?: string
-  momentumScore?: number
-  scoreDelta?: number
-  popularityScore?: number
+  spikingScore?: number
+  spikingScoreDelta?: number
+  activeScore?: number
+  climbingScore?: number
+  rank?: number
+  momentumContext?: MomentumContext
   coingeckoData?: {
     apiId: string
     type: string
@@ -48,7 +71,7 @@ interface MomentumData {
   projectName: string
   data: Array<{
     timestamp: string
-    momentumScore: number
+    spikingScore: number
     clusters: Array<{ id: string; name: string; count: number }>
   }>
 }
@@ -140,7 +163,7 @@ const RANK_COLUMNS: output.TableColumn[] = [
 export function registerProjectsCommand(program: Command): void {
   const projects = program
     .command('projects')
-    .description('Query tracked projects and momentum')
+    .description('Query tracked projects and scores')
     .argument('[id]', 'Project ID to get details for')
     .option('--page <n>', 'Page number', '1')
     .option('--limit <n>', 'Results per page')
@@ -150,13 +173,13 @@ export function registerProjectsCommand(program: Command): void {
     .option('--tickers <tickers>', 'Filter by tickers (comma-separated)')
     .option('--chain <chain>', 'Filter by chain')
     .option('--address <address>', 'Filter by token address')
-    .option('--min-momentum-score <score>', 'Minimum momentum score')
-    .option('--sort-by <field>', 'Sort by field (momentumScore, popularityScore, createdAt, reinforcedAt)', 'momentumScore')
+    .option('--min-spiking-score <score>', 'Minimum spiking score')
+    .option('--sort-by <field>', 'Sort by field (spikingScore, activeScore, climbingScore, createdAt, reinforcedAt)', 'spikingScore')
     .option('--has-token [bool]', 'Filter projects with/without tokens')
     .option('--exclude-stables', 'Exclude stablecoins')
     .option('--created-after <date>', 'Filter projects created after date (ISO 8601 or relative: -7d, -24h, -30m)')
     .option('--created-before <date>', 'Filter projects created before date (ISO 8601 or relative: -7d, -24h, -30m)')
-    .option('--signal-sort <field>', 'Sort embedded intel by field (createdAt, reinforcedAt)', 'createdAt')
+    .option('--intel-sort <field>', 'Sort embedded intel by field (createdAt, reinforcedAt)', 'createdAt')
     .option('--at <date>', 'Snapshot at a past time (ISO 8601 or relative: -24h, -7d)')
     .action(async (id: string | undefined, _opts: unknown, cmd: Command) => {
       if (id) {
@@ -224,13 +247,13 @@ async function handleProjectList(cmd: Command): Promise<void> {
     tickers: opts.tickers as string | undefined,
     chain: opts.chain as string | undefined,
     address: opts.address as string | undefined,
-    minMomentumScore: opts.minMomentumScore as string | undefined,
+    minSpikingScore: opts.minSpikingScore as string | undefined,
     sortBy: opts.sortBy as string,
     hasToken: opts.hasToken as string | undefined,
     excludeStables: opts.excludeStables ? 'true' : undefined,
     createdAfter: resolveDate(opts.createdAfter as string | undefined),
     createdBefore: resolveDate(opts.createdBefore as string | undefined),
-    signalSortBy: opts.signalSort as string,
+    intelSortBy: opts.intelSort as string,
     at: resolveDate(opts.at as string | undefined),
   }
 
@@ -275,7 +298,7 @@ async function handleProjectList(cmd: Command): Promise<void> {
       ? ` ${output.fmt.dim('$' + p.coingeckoData.symbol.toUpperCase())}`
       : ''
     return {
-      score: `${p.momentumScore ?? '-'}|${p.scoreDelta && p.scoreDelta > 0 ? '1' : '0'}`,
+      score: `${p.spikingScore ?? '-'}|${p.spikingScoreDelta && p.spikingScoreDelta > 0 ? '1' : '0'}`,
       name: `${p.name}${ticker}`,
       rationale: p.rationale ?? '-',
       change: p.metrics?.usd24hChange,
@@ -297,7 +320,7 @@ async function handleProjectDetail(id: string, cmd: Command): Promise<void> {
     outputFormat,
     () => withPayPerUse(
       () => get<ProjectData>(`/v2/projects/${encodeURIComponent(id)}`, {
-        signalSortBy: opts.signalSort as string,
+        intelSortBy: opts.intelSort as string,
         at: resolveDate(opts.at as string | undefined),
       }, clientOpts),
       authMode,
@@ -377,7 +400,7 @@ async function handleMomentum(id: string, cmd: Command): Promise<void> {
 
     return {
       timestamp: point.timestamp.replace('T', ' ').replace(/:\d{2}\.\d{3}Z$/, ''),
-      score: point.momentumScore,
+      score: point.spikingScore,
       clusters,
     }
   })
@@ -536,8 +559,14 @@ function buildProjectCard(p: ProjectData, verbosity: number): output.CardItem {
       : undefined,
     fields: [
       { label: 'ID', value: p.id ? output.fmt.id(p.id) : undefined },
-      { label: 'Score', value: typeof p.momentumScore === 'number' ? output.fmt.number(p.momentumScore.toFixed(2)) + (p.scoreDelta && p.scoreDelta > 0 ? ` ${output.fmt.green('↑')}` : '') : undefined },
-      { label: 'Popularity', value: typeof p.popularityScore === 'number' ? output.fmt.number(String(p.popularityScore)) : undefined },
+      { label: 'Score', value: typeof p.spikingScore === 'number' ? output.fmt.number(p.spikingScore.toFixed(2)) + (p.spikingScoreDelta && p.spikingScoreDelta > 0 ? ` ${output.fmt.green('↑')}` : '') : undefined },
+      { label: 'Active', value: typeof p.activeScore === 'number' ? `${p.activeScore}h` : undefined },
+      { label: 'Climbing', value: typeof p.climbingScore === 'number' ? output.fmt.number(p.climbingScore.toFixed(2)) : undefined },
+      { label: 'Trajectory', value: formatTrajectory(p.momentumContext?.trajectory) },
+      { label: 'Clusters', value: p.momentumContext?.distinctClusters != null ? String(p.momentumContext.distinctClusters) : undefined },
+      { label: 'Peak Rank (48h)', value: p.momentumContext?.peakRank48h != null ? `#${p.momentumContext.peakRank48h}` : undefined },
+      { label: 'Best Rank (14d)', value: p.momentumContext?.bestRank14d != null ? `#${p.momentumContext.bestRank14d}` : undefined },
+      { label: 'Stability', value: p.momentumContext?.leaderboard?.top25?.stabilityLabel ?? undefined },
       { label: 'X Handle', value: p.xHandle ? `@${p.xHandle}` : undefined },
       { label: 'Description', value: p.description },
       { label: 'Rationale', value: p.rationale },
@@ -571,6 +600,17 @@ function metricsColor(p: { metrics?: { usd24hChange?: number } }): (s: string) =
   return change >= 0 ? output.fmt.green : output.fmt.red
 }
 
+function formatTrajectory(trajectory: MomentumContext['trajectory'] | undefined): string | undefined {
+  if (!trajectory) return undefined
+  const indicators: Record<string, string> = {
+    rising: 'rising ↑',
+    decaying: 'decaying ↓',
+    stable: 'stable →',
+    new: 'new ✦',
+  }
+  return indicators[trajectory] ?? trajectory
+}
+
 
 function formatSignals(signals: SignalData[] | undefined, verbosity: number): output.CardField[] {
   if (verbosity < 2 || !signals || signals.length === 0) return []
@@ -581,12 +621,12 @@ function formatSignals(signals: SignalData[] | undefined, verbosity: number): ou
   const fields: output.CardField[] = []
   fields.push({ label: 'intel', value: '', section: true })
   for (const s of signals) {
-    const updates = s.activity?.length ?? 0
+    const updates = s.observationCount ?? 0
     const clusterTags = (s.clusters ?? []).map(c =>
       `${output.clusterDot(clusterColorMap.get(c.id) ?? 0, c.name)} ${output.fmt.dim(c.name)}`,
     ).join('  ')
-    const meta = output.fmt.dim(`Detected ${output.timeAgo(s.detectedAt)} · Reinforced ${output.timeAgo(s.reinforcedAt)} · ${updates} update${updates !== 1 ? 's' : ''}`)
-    const valueParts = [s.description, meta]
+    const meta = output.fmt.dim(`Detected ${output.timeAgo(s.detectedAt)} · Reinforced ${output.timeAgo(s.reinforcedAt)} · ${updates} observation${updates !== 1 ? 's' : ''}`)
+    const valueParts = [s.headline ?? s.description, meta]
     if (clusterTags) valueParts.push(clusterTags)
     if (verbosity >= 3 && (s.activity?.length ?? 0) > 1) {
       // Account for keyValue indent (2 + pad + 2 = 22 with default pad 18)
@@ -607,7 +647,7 @@ function formatSignals(signals: SignalData[] | undefined, verbosity: number): ou
 function filterProjectFields(p: ProjectData, verbosity: number): Record<string, unknown> {
   const result: Record<string, unknown> = {
     name: p.name,
-    momentumScore: p.momentumScore,
+    spikingScore: p.spikingScore,
     rationale: p.rationale,
   }
 
@@ -623,7 +663,11 @@ function filterProjectFields(p: ProjectData, verbosity: number): Record<string, 
     result.id = p.id
     result.description = p.description
     result.xHandle = p.xHandle
-    result.popularityScore = p.popularityScore
+    result.spikingScoreDelta = p.spikingScoreDelta
+    result.activeScore = p.activeScore
+    result.climbingScore = p.climbingScore
+    result.rank = p.rank
+    result.momentumContext = p.momentumContext
     result.metrics = p.metrics
     result.tokens = p.tokens
     result.createdAt = p.createdAt

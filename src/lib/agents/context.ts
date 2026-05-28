@@ -12,7 +12,7 @@ import { isApiStep } from '../../types.js'
 const INTEL_CONTEXT = [
   'Intel: Each intel item has detectedAt (first sighting) and reinforcedAt (latest confirmation).',
   'When multiple independent detections report the same event, they reinforce one intel item rather than creating duplicates.',
-  'The activity array length is the total detection count: 1 means a single detection with no reinforcement.',
+  'observationCount is the total detection count: 1 means a single detection with no reinforcement. The activity array contains the detail entries.',
   'Intel descriptions evolve over time: initial detections may be incomplete, underlying facts or metrics can change as events unfold, or early reports may be corrected.',
   'hasOfficialSource means the project\'s own official account appears in the intel item\'s activity.',
 ].join(' ')
@@ -23,9 +23,10 @@ const ACTION_CONTEXT: Record<string, string> = {
   signals: INTEL_CONTEXT,
 
   projects: [
-    'Projects: momentumScore measures rate of change in cluster attention (how quickly new clusters pick up a project).',
-    'popularityScore measures sustained mention volume over time.',
-    'High momentum with low popularity = emerging project gaining traction. High popularity with declining momentum = established but cooling off.',
+    'Projects: spikingScore measures rate of change in cluster attention (real-time momentum in 15-min windows with time decay).',
+    'activeScore measures hours with mentions in the last 24h (0-24).',
+    'climbingScore measures sustained 72h growth trend using 4h buckets, with author/cluster breadth and concentration penalties.',
+    'High spiking with low active = emerging project gaining traction. High active with declining spiking = established but cooling off. High climbing = sustained multi-day growth.',
     'createdAt is when AIXBT started tracking the project, not when the project itself launched.',
   ].join(' '),
 
