@@ -124,7 +124,7 @@ describe('aixbtProvider', () => {
     // -- projects action --
 
     describe('projects action', () => {
-      it('should have params including page, limit, chain, and minSpikingScore', () => {
+      it('should have current projects params without stale scoring aliases', () => {
         const paramNames = aixbtProvider.actions.projects.params.map(
           (p) => p.name,
         )
@@ -132,6 +132,10 @@ describe('aixbtProvider', () => {
         expect(paramNames).toContain('limit')
         expect(paramNames).toContain('chain')
         expect(paramNames).toContain('minSpikingScore')
+        expect(paramNames).toContain('sortBy')
+        expect(paramNames).toContain('intelSortBy')
+        expect(paramNames).not.toContain('minMomentumScore')
+        expect(paramNames).not.toContain('signalSortBy')
       })
 
       it('should have no required params', () => {
@@ -152,6 +156,14 @@ describe('aixbtProvider', () => {
         expect(idParam).toBeDefined()
         expect(idParam!.required).toBe(true)
         expect(idParam!.inPath).toBe(true)
+      })
+
+      it('should use intelSortBy without stale signalSortBy alias', () => {
+        const paramNames = aixbtProvider.actions.project.params.map(
+          (p) => p.name,
+        )
+        expect(paramNames).toContain('intelSortBy')
+        expect(paramNames).not.toContain('signalSortBy')
       })
     })
 

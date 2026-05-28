@@ -1,4 +1,4 @@
-import type { Command } from 'commander'
+import { Option, type Command } from 'commander'
 import type { SignalData } from '../types.js'
 import { getClientOptions, getPublicClientOptions } from '../lib/auth.js'
 import { get } from '../lib/api-client.js'
@@ -24,7 +24,7 @@ interface MomentumContext {
   peakRank48h: number | null
   bestRank14d: number | null
   rankedSince: string | null
-  leaderboard?: {
+  leaderboard: {
     top10: LeaderboardEntry
     top25: LeaderboardEntry
   }
@@ -53,11 +53,11 @@ interface ProjectData {
     categories: string[]
   }
   metrics?: {
-    usd: number
-    usdMarketCap: number
-    usd24hVol: number
-    usd24hChange: number
-    lastUpdatedAt: number
+    usd?: number
+    usdMarketCap?: number
+    usd24hVol?: number
+    usd24hChange?: number
+    lastUpdatedAt?: number
   }
   tokens?: Array<{ chain: string; address: string; source: string }>
   createdAt?: string
@@ -158,6 +158,9 @@ const RANK_COLUMNS: output.TableColumn[] = [
   },
 ]
 
+const PROJECT_SORT_FIELDS = ['spikingScore', 'activeScore', 'climbingScore', 'createdAt', 'reinforcedAt']
+const EMBEDDED_INTEL_SORT_FIELDS = ['reinforcedAt', 'detectedAt']
+
 // -- Command registration --
 
 export function registerProjectsCommand(program: Command): void {
@@ -174,12 +177,12 @@ export function registerProjectsCommand(program: Command): void {
     .option('--chain <chain>', 'Filter by chain')
     .option('--address <address>', 'Filter by token address')
     .option('--min-spiking-score <score>', 'Minimum spiking score')
-    .option('--sort-by <field>', 'Sort by field (spikingScore, activeScore, climbingScore, createdAt, reinforcedAt)', 'spikingScore')
+    .addOption(new Option('--sort-by <field>', 'Sort by field (spikingScore, activeScore, climbingScore, createdAt, reinforcedAt)').choices(PROJECT_SORT_FIELDS).default('spikingScore'))
     .option('--has-token [bool]', 'Filter projects with/without tokens')
     .option('--exclude-stables', 'Exclude stablecoins')
     .option('--created-after <date>', 'Filter projects created after date (ISO 8601 or relative: -7d, -24h, -30m)')
     .option('--created-before <date>', 'Filter projects created before date (ISO 8601 or relative: -7d, -24h, -30m)')
-    .option('--intel-sort <field>', 'Sort embedded intel by field (createdAt, reinforcedAt)', 'createdAt')
+    .addOption(new Option('--intel-sort <field>', 'Sort embedded intel by field (reinforcedAt, detectedAt)').choices(EMBEDDED_INTEL_SORT_FIELDS).default('reinforcedAt'))
     .option('--at <date>', 'Snapshot at a past time (ISO 8601 or relative: -24h, -7d)')
     .action(async (id: string | undefined, _opts: unknown, cmd: Command) => {
       if (id) {
@@ -559,7 +562,7 @@ function buildProjectCard(p: ProjectData, verbosity: number): output.CardItem {
       : undefined,
     fields: [
       { label: 'ID', value: p.id ? output.fmt.id(p.id) : undefined },
-      { label: 'Score', value: typeof p.spikingScore === 'number' ? output.fmt.number(p.spikingScore.toFixed(2)) + (p.spikingScoreDelta && p.spikingScoreDelta > 0 ? ` ${output.fmt.green('↑')}` : '') : undefined },
+      { label: 'Spiking', value: typeof p.spikingScore === 'number' ? output.fmt.number(p.spikingScore.toFixed(2)) + (p.spikingScoreDelta && p.spikingScoreDelta > 0 ? ` ${output.fmt.green('↑')}` : '') : undefined },
       { label: 'Active', value: typeof p.activeScore === 'number' ? `${p.activeScore}h` : undefined },
       { label: 'Climbing', value: typeof p.climbingScore === 'number' ? output.fmt.number(p.climbingScore.toFixed(2)) : undefined },
       { label: 'Trajectory', value: formatTrajectory(p.momentumContext?.trajectory) },
@@ -594,6 +597,13 @@ function buildProjectCard(p: ProjectData, verbosity: number): output.CardItem {
 
 // -- Utility --
 
+const TRAJECTORY_INDICATORS: Record<string, string> = {
+  rising: 'rising ↑',
+  decaying: 'decaying ↓',
+  stable: 'stable →',
+  new: 'new ✦',
+}
+
 function metricsColor(p: { metrics?: { usd24hChange?: number } }): (s: string) => string {
   const change = p.metrics?.usd24hChange
   if (change == null) return output.fmt.yellow
@@ -602,13 +612,7 @@ function metricsColor(p: { metrics?: { usd24hChange?: number } }): (s: string) =
 
 function formatTrajectory(trajectory: MomentumContext['trajectory'] | undefined): string | undefined {
   if (!trajectory) return undefined
-  const indicators: Record<string, string> = {
-    rising: 'rising ↑',
-    decaying: 'decaying ↓',
-    stable: 'stable →',
-    new: 'new ✦',
-  }
-  return indicators[trajectory] ?? trajectory
+  return TRAJECTORY_INDICATORS[trajectory] ?? trajectory
 }
 
 
@@ -621,17 +625,18 @@ function formatSignals(signals: SignalData[] | undefined, verbosity: number): ou
   const fields: output.CardField[] = []
   fields.push({ label: 'intel', value: '', section: true })
   for (const s of signals) {
-    const updates = s.observationCount ?? 0
+    const activity = s.activity ?? []
+    const observations = s.observationCount ?? s.activity?.length ?? 0
     const clusterTags = (s.clusters ?? []).map(c =>
       `${output.clusterDot(clusterColorMap.get(c.id) ?? 0, c.name)} ${output.fmt.dim(c.name)}`,
     ).join('  ')
-    const meta = output.fmt.dim(`Detected ${output.timeAgo(s.detectedAt)} · Reinforced ${output.timeAgo(s.reinforcedAt)} · ${updates} observation${updates !== 1 ? 's' : ''}`)
+    const meta = output.fmt.dim(`Detected ${output.timeAgo(s.detectedAt)} · Reinforced ${output.timeAgo(s.reinforcedAt)} · ${observations} observation${observations !== 1 ? 's' : ''}`)
     const valueParts = [s.headline ?? s.description, meta]
     if (clusterTags) valueParts.push(clusterTags)
-    if (verbosity >= 3 && (s.activity?.length ?? 0) > 1) {
+    if (verbosity >= 3 && activity.length > 1) {
       // Account for keyValue indent (2 + pad + 2 = 22 with default pad 18)
       const activityWidth = (process.stdout.columns || 80) - 22
-      const entries = output.formatActivity(s.activity, clusterColorMap, { width: activityWidth })
+      const entries = output.formatActivity(activity, clusterColorMap, { width: activityWidth })
       valueParts.push(output.fmt.boldWhite('activity'))
       for (let i = 0; i < entries.length; i++) {
         if (i > 0) valueParts.push('')
@@ -702,4 +707,3 @@ function filterProjectFields(p: ProjectData, verbosity: number): Record<string, 
 
   return result
 }
-

@@ -11,7 +11,8 @@
 - **New** — Signal enrichment fields: `headline`, `observationCount`, `sentiment`, `citations`, `referencesMetrics`, `metrics`
 - **New** — Signal display prefers `headline` over `description`, shows observation count and sentiment indicator
 - **New** — Citations displayed in verbose mode for intel
-- **Changed** — `Popularity` card field replaced by `Active` (hours with mentions, displayed as `Nh`)
+- **Changed** — Card view score labels renamed: `Score` → `Spiking`, `Popularity` → `Active` (hours with mentions, displayed as `Nh`)
+- **Changed** — Embedded project intel now sorts by `reinforcedAt` by default; `--intel-sort` accepts `reinforcedAt` or `detectedAt`
 - **Changed** — Agent context and system prompt updated for three-score system (spiking, active, climbing)
 
 ## 0.3.1

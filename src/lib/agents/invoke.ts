@@ -478,7 +478,7 @@ function spawnObserverCalls(
   // Observer always uses claude/haiku — skip if claude isn't available
   try { execSync('which claude', { stdio: 'ignore' }) } catch { return Promise.resolve() }
 
-  const systemPrompt = 'You are scanning AIXBT crypto intelligence data. Respond with ONE short sentence (max 100 characters). Focus on: what projects or intel stand out, risk events (exploits, hacks, whale exits), or unusual patterns. Ignore momentum scores and price data. No preamble, no labels, no step names.'
+  const systemPrompt = 'You are scanning AIXBT crypto intelligence data. Respond with ONE short sentence (max 100 characters). Focus on: what projects or intel stand out, risk events (exploits, hacks, whale exits), or unusual patterns. Ignore scores and price data. No preamble, no labels, no step names.'
 
   const promises = sections.map(({ stepId, data: sectionData }) => {
     return new Promise<void>((resolve) => {

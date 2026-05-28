@@ -34,7 +34,7 @@ const actions: Record<string, ActionDefinition> = {
       { name: 'sortBy', required: false, description: 'Sort field (spikingScore, activeScore, climbingScore, createdAt, reinforcedAt)' },
       { name: 'hasToken', required: false, description: 'Filter to projects with a token (true/false)' },
       { name: 'excludeStables', required: false, description: 'Exclude stablecoins (true/false)' },
-      { name: 'intelSortBy', required: false, description: 'Sort order for embedded intel' },
+      { name: 'intelSortBy', required: false, description: 'Sort embedded intel (reinforcedAt, detectedAt)' },
       { name: 'at', required: false, description: 'Historical timestamp (ISO 8601). Returns data as of this point in time.' },
     ],
     minTier: 'free',
@@ -46,7 +46,7 @@ const actions: Record<string, ActionDefinition> = {
     hint: 'You have a specific project ID and need its full details, description, tokens, and recent intel',
     params: [
       { name: 'id', required: true, description: 'Project ID', inPath: true },
-      { name: 'intelSortBy', required: false, description: 'Sort order for embedded intel' },
+      { name: 'intelSortBy', required: false, description: 'Sort embedded intel (reinforcedAt, detectedAt)' },
       { name: 'at', required: false, description: 'Historical timestamp (ISO 8601). Returns data as of this point in time.' },
     ],
     minTier: 'free',
@@ -54,8 +54,8 @@ const actions: Record<string, ActionDefinition> = {
   momentum: {
     method: 'GET',
     path: '/v2/projects/{id}/momentum',
-    description: 'Get momentum score history for a project',
-    hint: 'You need historical momentum data for a project over a time range',
+    description: 'Get spiking score history for a project',
+    hint: 'You need historical spiking score data for a project over a time range',
     params: [
       { name: 'id', required: true, description: 'Project ID', inPath: true },
       { name: 'start', required: false, description: 'Start date (ISO 8601 or relative like -7d)' },

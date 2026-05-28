@@ -122,6 +122,7 @@ async function handleIntelList(cmd: Command): Promise<void> {
 
   for (let i = 0; i < result.data.length; i++) {
     const s = result.data[i]
+    const activity = s.activity ?? []
     if (i > 0) console.log()
 
     // Title line: name  CATEGORY  [HOT] [OFFICIAL]  sentiment
@@ -136,8 +137,8 @@ async function handleIntelList(cmd: Command): Promise<void> {
     console.log(s.headline ?? s.description)
 
     // Meta line
-    const updates = s.observationCount ?? 0
-    console.log(output.fmt.dim(`Detected ${output.timeAgo(s.detectedAt)} · Reinforced ${output.timeAgo(s.reinforcedAt)} · ${updates} observation${updates !== 1 ? 's' : ''}`))
+    const observations = s.observationCount ?? s.activity?.length ?? 0
+    console.log(output.fmt.dim(`Detected ${output.timeAgo(s.detectedAt)} · Reinforced ${output.timeAgo(s.reinforcedAt)} · ${observations} observation${observations !== 1 ? 's' : ''}`))
 
     // Cluster dots
     const clusterTags = (s.clusters ?? []).map(c =>
@@ -148,9 +149,9 @@ async function handleIntelList(cmd: Command): Promise<void> {
     // Verbose: ID + activity (only when reinforced, i.e. >1 update) + citations
     if (verbosity >= 1) {
       console.log(output.fmt.dim(`ID: ${s.id}`))
-      if ((s.activity?.length ?? 0) > 1) {
+      if (activity.length > 1) {
         console.log(output.fmt.boldWhite('activity'))
-        const entries = output.formatActivity(s.activity, clusterColorMap)
+        const entries = output.formatActivity(activity, clusterColorMap)
         for (let j = 0; j < entries.length; j++) {
           if (j > 0) console.log()
           console.log(entries[j])

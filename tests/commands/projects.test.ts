@@ -31,6 +31,30 @@ vi.mock('@inquirer/prompts', () => ({
 
 // -- Mock data --
 
+const MOCK_MOMENTUM_CONTEXT = {
+  trajectory: 'rising',
+  distinctClusters: 7,
+  peakRank48h: 2,
+  bestRank14d: 5,
+  rankedSince: '2026-03-01T00:00:00Z',
+  leaderboard: {
+    top10: {
+      enteredAt: '2026-03-01T00:00:00Z',
+      currentHours: 6,
+      wasYesterday: false,
+      entryCount24h: 1,
+      stabilityLabel: 'fresh',
+    },
+    top25: {
+      enteredAt: '2026-02-28T00:00:00Z',
+      currentHours: 30,
+      wasYesterday: true,
+      entryCount24h: 2,
+      stabilityLabel: 'persistent',
+    },
+  },
+}
+
 const MOCK_PROJECTS = [
   {
     id: 'proj-1',
@@ -40,6 +64,8 @@ const MOCK_PROJECTS = [
     spikingScoreDelta: 1.2,
     activeScore: 18,
     climbingScore: 4.56,
+    rank: 2,
+    momentumContext: MOCK_MOMENTUM_CONTEXT,
     signals: [{ id: 's1', category: 'DeFi', description: 'Test signal' }],
   },
   {
@@ -63,6 +89,8 @@ const MOCK_PROJECT_DETAIL = {
   spikingScoreDelta: 1.2,
   activeScore: 18,
   climbingScore: 4.56,
+  rank: 2,
+  momentumContext: MOCK_MOMENTUM_CONTEXT,
   metrics: {
     usd: 65000.123456,
     usdMarketCap: 1300000000000,
@@ -162,6 +190,7 @@ describe('projects commands', () => {
       expect(callUrl.searchParams.get('page')).toBe('1')
       expect(callUrl.searchParams.get('limit')).toBeNull()
       expect(callUrl.searchParams.get('sortBy')).toBe('spikingScore')
+      expect(callUrl.searchParams.get('intelSortBy')).toBe('reinforcedAt')
 
       // Verify JSON output contains project data
       const jsonOutput = logs.find(l => l.includes('Bitcoin'))
@@ -169,7 +198,34 @@ describe('projects commands', () => {
       const parsed = JSON.parse(jsonOutput!)
       expect(parsed.data).toHaveLength(2)
       expect(parsed.data[0].name).toBe('Bitcoin')
+      expect(parsed.data[0].spikingScore).toBe(85.5)
+      expect(parsed.data[0]).not.toHaveProperty('momentumScore')
+      expect(parsed.data[0]).not.toHaveProperty('scoreDelta')
+      expect(parsed.data[0]).not.toHaveProperty('popularityScore')
       expect(parsed.data[1].name).toBe('Ethereum')
+    })
+
+    it.each(['spikingScore', 'activeScore', 'climbingScore', 'createdAt', 'reinforcedAt'])('should accept sort field %s', async (sortBy) => {
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse(200, { status: 200, data: MOCK_PROJECTS }),
+      )
+
+      const program = createProgram()
+      program.exitOverride()
+      await program.parseAsync(['node', 'aixbt', '--format', 'json', 'projects', '--sort-by', sortBy], { from: 'node' })
+
+      const callUrl = new URL(mockFetch.mock.calls[0][0] as string)
+      expect(callUrl.searchParams.get('sortBy')).toBe(sortBy)
+    })
+
+    it.each(['momentumScore', 'popularityScore'])('should reject old sort field %s', async (sortBy) => {
+      const program = createProgram()
+      program.exitOverride()
+
+      await expect(
+        program.parseAsync(['node', 'aixbt', '--format', 'json', 'projects', '--sort-by', sortBy], { from: 'node' }),
+      ).rejects.toThrow()
+      expect(mockFetch).not.toHaveBeenCalled()
     })
 
     it('should include pagination in JSON output when present', async () => {
@@ -204,6 +260,32 @@ describe('projects commands', () => {
       expect(callUrl.searchParams.get('chain')).toBe('ethereum')
       expect(callUrl.searchParams.get('minSpikingScore')).toBe('50')
       expect(callUrl.searchParams.get('limit')).toBe('10')
+    })
+
+    it('should pass embedded intel sort as intelSortBy', async () => {
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse(200, { status: 200, data: [] }),
+      )
+
+      const program = createProgram()
+      program.exitOverride()
+      await program.parseAsync(
+        ['node', 'aixbt', '--format', 'json', 'projects', '--intel-sort', 'detectedAt'],
+        { from: 'node' },
+      )
+
+      const callUrl = new URL(mockFetch.mock.calls[0][0] as string)
+      expect(callUrl.searchParams.get('intelSortBy')).toBe('detectedAt')
+    })
+
+    it('should reject old --signal-sort flag', async () => {
+      const program = createProgram()
+      program.exitOverride()
+
+      await expect(
+        program.parseAsync(['node', 'aixbt', '--format', 'json', 'projects', '--signal-sort', 'detectedAt'], { from: 'node' }),
+      ).rejects.toThrow()
+      expect(mockFetch).not.toHaveBeenCalled()
     })
 
     it('should display human output with score, name, rationale, and 24h change', async () => {
@@ -281,10 +363,19 @@ describe('projects commands', () => {
       // Card fields
       expect(allOutput).toContain('ID')
       expect(allOutput).toContain('proj-1')
-      expect(allOutput).toContain('Score')
+      expect(allOutput).toContain('Spiking')
       expect(allOutput).toContain('Active')
+      expect(allOutput).toContain('18h')
       expect(allOutput).toContain('Climbing')
       expect(allOutput).toContain('4.56')
+      expect(allOutput).toContain('Trajectory')
+      expect(allOutput).toContain('rising')
+      expect(allOutput).toContain('Peak Rank (48h)')
+      expect(allOutput).toContain('#2')
+      expect(allOutput).toContain('Best Rank (14d)')
+      expect(allOutput).toContain('#5')
+      expect(allOutput).toContain('Stability')
+      expect(allOutput).toContain('persistent')
       expect(allOutput).toContain('X Handle')
       expect(allOutput).toContain('@bitcoin')
       expect(allOutput).toContain('Description')
@@ -295,6 +386,39 @@ describe('projects commands', () => {
       expect(allOutput).toContain('Tokens')
       expect(allOutput).toContain('Created')
       expect(allOutput).toContain('Reinforced')
+    })
+
+    it('should display embedded intel headline and observation count with -vv', async () => {
+      const projectsWithSignals = [
+        {
+          ...MOCK_PROJECTS[0],
+          signals: [
+            {
+              id: 's1',
+              category: 'DeFi',
+              description: 'Long fallback signal description',
+              headline: 'Short signal headline',
+              observationCount: 4,
+              detectedAt: '2026-03-01T00:00:00Z',
+              reinforcedAt: '2026-03-02T00:00:00Z',
+              clusters: [{ id: 'c1', name: 'DeFi Trends' }],
+              activity: [],
+            },
+          ],
+        },
+      ]
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse(200, { status: 200, data: projectsWithSignals }),
+      )
+
+      const program = createProgram()
+      program.exitOverride()
+      await program.parseAsync(['node', 'aixbt', '-vv', 'projects'], { from: 'node' })
+
+      const allOutput = logs.join('\n')
+      expect(allOutput).toContain('Short signal headline')
+      expect(allOutput).not.toContain('Long fallback signal description')
+      expect(allOutput).toContain('4 observations')
     })
 
     it('should show pagination hint when hasMore is true', async () => {
@@ -367,12 +491,34 @@ describe('projects commands', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1)
       const callUrl = new URL(mockFetch.mock.calls[0][0] as string)
       expect(callUrl.pathname).toBe('/v2/projects/proj-1')
+      expect(callUrl.searchParams.get('intelSortBy')).toBe('reinforcedAt')
 
       const jsonOutput = logs.find(l => l.includes('Bitcoin'))
       expect(jsonOutput).toBeDefined()
       const parsed = JSON.parse(jsonOutput!)
       expect(parsed.data.id).toBe('proj-1')
       expect(parsed.data.name).toBe('Bitcoin')
+      expect(parsed.data.spikingScoreDelta).toBe(1.2)
+      expect(parsed.data.activeScore).toBe(18)
+      expect(parsed.data.climbingScore).toBe(4.56)
+      expect(parsed.data.rank).toBe(2)
+      expect(parsed.data.momentumContext).toEqual(MOCK_MOMENTUM_CONTEXT)
+      expect(parsed.data).not.toHaveProperty('momentumScore')
+      expect(parsed.data).not.toHaveProperty('scoreDelta')
+      expect(parsed.data).not.toHaveProperty('popularityScore')
+    })
+
+    it('should pass explicit embedded intel sort for project detail', async () => {
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse(200, { status: 200, data: MOCK_PROJECT_DETAIL }),
+      )
+
+      const program = createProgram()
+      program.exitOverride()
+      await program.parseAsync(['node', 'aixbt', '--format', 'json', 'projects', 'proj-1', '--intel-sort', 'detectedAt'], { from: 'node' })
+
+      const callUrl = new URL(mockFetch.mock.calls[0][0] as string)
+      expect(callUrl.searchParams.get('intelSortBy')).toBe('detectedAt')
     })
 
     it('should display key-value output in human mode', async () => {
@@ -467,6 +613,8 @@ describe('projects commands', () => {
       // Table headers
       expect(allOutput).toContain('Score')
       expect(allOutput).toContain('Clusters:mentions')
+      expect(allOutput).toContain('82.100')
+      expect(allOutput).toContain('85.500')
     })
 
     it('should show "No momentum data" when data array is empty', async () => {
