@@ -47,22 +47,42 @@ export interface SignalData {
   detectedAt: string
   reinforcedAt: string
   description: string
+  headline?: string
   projectName: string
   projectId: string
   category: string
   hasOfficialSource: boolean
+  observationCount: number
+  sentiment?: number | null
+  citations: string[]
+  referencesMetrics?: boolean | null
+  metrics?: {
+    usd: number | null
+    usdMarketCap: number | null
+    usd24hVol: number | null
+    usd24hChange: number | null
+    lastUpdatedAt: number | null
+  } | null
   clusters: Array<{ id: string; name: string }>
-  activity: ActivityEntry[]
+  activity?: ActivityEntry[]
 }
 
 export interface ActivityEntry {
+  id?: string
+  action?: string
   date: string
-  source: string
-  cluster: { id: string; name: string } | null
-  incoming: string
-  result: string
+  source?: string
+  clusters?: Array<{ id: string; name: string }>
+  cluster?: { id: string; name: string } | null
+  incoming?: string
+  result?: string
+  headline?: string
+  sentiment?: number | null
   isOfficial?: boolean
   fromSignal?: { signalId: string; projectId: string; projectName: string }
+  actor?: { type: string }
+  citationEvidence?: Array<{ id: string; url: string; targetActivityIds?: string[] }>
+  changelog?: string
 }
 
 // -- Recipe YAML schema types --

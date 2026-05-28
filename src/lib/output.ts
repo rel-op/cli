@@ -163,8 +163,12 @@ export function formatActivity(
   // Build cluster snapshots chronologically (activity is oldest-first)
   const clusterSnapshots: Set<string>[] = []
   const seen = new Set<string>()
+  const clusterNames = new Map<string, string>()
   for (const a of activity) {
-    if (a.cluster) seen.add(a.cluster.id)
+    for (const cluster of activityClusters(a)) {
+      seen.add(cluster.id)
+      clusterNames.set(cluster.id, cluster.name)
+    }
     clusterSnapshots.push(new Set(seen))
   }
   const reversed = [...activity].reverse()
@@ -173,7 +177,8 @@ export function formatActivity(
     const lines: string[] = []
     const officialBadge = a.isOfficial ? ` ${fmt.tag('OFFICIAL', '#87ceeb')}` : ''
     if (a.date) lines.push(`${indent}${fmt.dim(timeAgo(a.date))}${officialBadge}`)
-    lines.push(`${indent}${fmt.brand('→ incoming:')} ${wrapIndented(fmt.dim(a.incoming), indent, 15, cols)}`)
+    const detail = formatActivityDetail(a, indent, cols)
+    if (detail) lines.push(detail)
     if (isFirst) {
       lines.push(`${indent}${fmt.green('↳ SIGNAL CREATED')}`)
     } else if (a.result) {
@@ -183,13 +188,39 @@ export function formatActivity(
     const snapshot = clusterSnapshots[chronoIdx]
     if (snapshot.size > 0) {
       const dots = [...snapshot].map(id => {
-        const name = activity.find(x => x.cluster?.id === id)?.cluster?.name ?? ''
+        const name = clusterNames.get(id) ?? ''
         return `${clusterDot(clusterColorMap.get(id) ?? 0, name)} ${fmt.dim(name)}`
       }).join('  ')
       lines.push(`${indent}${dots}`)
     }
     return lines.join('\n')
   })
+}
+
+function activityClusters(entry: ActivityEntry | undefined): Array<{ id: string; name: string }> {
+  if (!entry) return []
+  if (entry.clusters?.length) return entry.clusters
+  return entry.cluster ? [entry.cluster] : []
+}
+
+function formatActivityDetail(entry: ActivityEntry, indent: string, cols: number): string | undefined {
+  if (entry.incoming) {
+    return `${indent}${fmt.brand('→ incoming:')} ${wrapIndented(fmt.dim(entry.incoming), indent, 15, cols)}`
+  }
+  if (entry.changelog) {
+    return `${indent}${fmt.brand('→ change:')} ${wrapIndented(fmt.dim(entry.changelog), indent, 13, cols)}`
+  }
+  if (entry.citationEvidence?.length) {
+    const urls = entry.citationEvidence.map(c => c.url).join(', ')
+    return `${indent}${fmt.brand('→ citation:')} ${wrapIndented(fmt.dim(urls), indent, 15, cols)}`
+  }
+  if (entry.headline) {
+    return `${indent}${fmt.brand('→ headline:')} ${wrapIndented(fmt.dim(entry.headline), indent, 15, cols)}`
+  }
+  if (entry.actor?.type) {
+    return `${indent}${fmt.brand('→ actor:')} ${fmt.dim(entry.actor.type)}`
+  }
+  return undefined
 }
 
 // -- Time formatting --
