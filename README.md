@@ -27,7 +27,7 @@ Four access modes: API key, x402 purchase pass, x402 pay-per-use, and delayed (f
 | `login` | Authenticate with the AIXBT API |
 | `logout` | Remove stored credentials |
 | `whoami` | Show current authentication status |
-| `projects` | Query tracked projects and momentum |
+| `projects` | Query tracked projects and scores |
 | `intel` | Query real-time detected intel |
 | `chat` | Conversational analysis with aixbt |
 | `grounding` | Market grounding snapshot (narratives, macro, geopolitics, tradfi) |

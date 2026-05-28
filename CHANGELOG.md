@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0
+
+- **Breaking** — `--min-momentum-score` flag removed, replaced by `--min-spiking-score`
+- **Breaking** — `--signal-sort` flag removed, replaced by `--intel-sort`
+- **Breaking** — `--sort-by` valid values changed: `momentumScore` to `spikingScore`, `popularityScore` to `activeScore`, added `climbingScore`
+- **Breaking** — JSON output field renames: `momentumScore` to `spikingScore`, `scoreDelta` to `spikingScoreDelta`, `popularityScore` to `activeScore`
+- **New** — `climbingScore` (sustained 72h growth) displayed in card view
+- **New** — `momentumContext` fields in card view: trajectory, clusters, peak rank, best rank, stability
+- **New** — Signal enrichment fields: `headline`, `observationCount`, `sentiment`, `citations`, `referencesMetrics`, `metrics`
+- **New** — Signal display prefers `headline` over `description`, shows observation count and sentiment indicator
+- **New** — Citations displayed in verbose mode for intel
+- **Changed** — `Popularity` card field replaced by `Active` (hours with mentions, displayed as `Nh`)
+- **Changed** — Agent context and system prompt updated for three-score system (spiking, active, climbing)
+
 ## 0.3.1
 
 - **Fix** — recipe list/info/clone commands now hit the correct `/v2/recipes` endpoint (was using removed `/v2/cli/recipes` path)
