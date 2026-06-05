@@ -16,9 +16,17 @@ export function getTimeAnchor(): Date | undefined { return _timeAnchor }
 
 // eslint-disable-next-line no-control-regex
 const ANSI_RE = /\x1b\[[0-9;]*m/g
+const ANSI_RESET = '\x1b[0m'
 
 function stripAnsi(s: string): string {
   return s.replace(ANSI_RE, '')
+}
+
+function hasAnsi(s: string): boolean {
+  ANSI_RE.lastIndex = 0
+  const result = ANSI_RE.test(s)
+  ANSI_RE.lastIndex = 0
+  return result
 }
 
 function visibleLength(s: string): number {
@@ -323,7 +331,7 @@ export function keyValue(key: string, value: string, pad = 18, opts?: { noColon?
       const leadMatch = plainPart.match(/^(\s+)/)
       const lead = leadMatch ? leadMatch[1] : ''
       const innerWidth = valueWidth - lead.length
-      const inner = lead.length > 0 ? part.slice(lead.length) : part
+      const inner = lead.length > 0 ? visibleSlice(part, lead.length) : part
       const wrapped = innerWidth > 20 ? wrapText(inner, innerWidth) : [inner]
       for (const chunk of wrapped) {
         const line = `${lead}${chunk}`
@@ -451,27 +459,116 @@ function buildCharMap(styled: string): number[] {
   return map
 }
 
+interface SgrState {
+  intensity?: string
+  italic?: string
+  underline?: string
+  inverse?: string
+  hidden?: string
+  strike?: string
+  foreground?: string
+  background?: string
+}
+
+function sgr(params: number[]): string {
+  return `\x1b[${params.join(';')}m`
+}
+
+function applySgrCode(state: SgrState, code: string): void {
+  const body = code.slice(2, -1)
+  const params = body === '' ? [0] : body.split(';').map((p) => Number(p || 0))
+
+  for (let i = 0; i < params.length; i++) {
+    const n = params[i]
+    if (n === 0) {
+      for (const key of Object.keys(state) as Array<keyof SgrState>) delete state[key]
+    } else if (n === 1 || n === 2) {
+      state.intensity = sgr([n])
+    } else if (n === 3) {
+      state.italic = sgr([n])
+    } else if (n === 4) {
+      state.underline = sgr([n])
+    } else if (n === 7) {
+      state.inverse = sgr([n])
+    } else if (n === 8) {
+      state.hidden = sgr([n])
+    } else if (n === 9) {
+      state.strike = sgr([n])
+    } else if (n === 22) {
+      delete state.intensity
+    } else if (n === 23) {
+      delete state.italic
+    } else if (n === 24) {
+      delete state.underline
+    } else if (n === 27) {
+      delete state.inverse
+    } else if (n === 28) {
+      delete state.hidden
+    } else if (n === 29) {
+      delete state.strike
+    } else if ((n >= 30 && n <= 37) || (n >= 90 && n <= 97)) {
+      state.foreground = sgr([n])
+    } else if ((n >= 40 && n <= 47) || (n >= 100 && n <= 107)) {
+      state.background = sgr([n])
+    } else if (n === 38 || n === 48) {
+      const mode = params[i + 1]
+      const length = mode === 2 ? 5 : mode === 5 ? 3 : 1
+      const sequence = params.slice(i, i + length)
+      if (n === 38) state.foreground = sgr(sequence)
+      else state.background = sgr(sequence)
+      i += length - 1
+    } else if (n === 39) {
+      delete state.foreground
+    } else if (n === 49) {
+      delete state.background
+    }
+  }
+}
+
+function activeSgrPrefix(styled: string, untilIndex: number): string {
+  const state: SgrState = {}
+  const re = new RegExp(ANSI_RE.source, 'g')
+  let match: RegExpExecArray | null
+
+  while ((match = re.exec(styled)) && match.index < untilIndex) {
+    applySgrCode(state, match[0])
+  }
+
+  return [
+    state.intensity,
+    state.italic,
+    state.underline,
+    state.inverse,
+    state.hidden,
+    state.strike,
+    state.foreground,
+    state.background,
+  ].filter(Boolean).join('')
+}
+
 /**
  * Slice a styled string by plain-text offsets, preserving all ANSI codes.
  * Includes any ANSI codes that appear before/within the slice range.
  */
 function styledSlice(styled: string, map: number[], start: number, end: number): string {
   if (map.length === 0) return ''
-  // Find the styled index for the start — include any leading ANSI codes
-  let sStart = start === 0 ? 0 : map[start]
-  // Walk backwards from sStart to include any ANSI codes just before this char
-  if (start > 0) {
-    while (sStart > 0 && styled[sStart - 1] === 'm') {
-      const codeStart = styled.lastIndexOf('\x1b', sStart - 1)
-      if (codeStart >= 0 && codeStart >= (map[start - 1] ?? 0) + 1) {
-        sStart = codeStart
-      } else {
-        break
-      }
-    }
-  }
-  const sEnd = end >= map.length ? styled.length : map[end]
-  return styled.slice(sStart, sEnd)
+  const safeStart = Math.max(0, Math.min(start, map.length))
+  const safeEnd = Math.max(safeStart, Math.min(end, map.length))
+  if (safeStart === safeEnd) return ''
+
+  const sStart = safeStart === 0 ? 0 : map[safeStart]
+  const sEnd = safeEnd >= map.length ? styled.length : map[safeEnd]
+  const prefix = safeStart === 0 ? '' : activeSgrPrefix(styled, sStart)
+  const slice = styled.slice(sStart, sEnd)
+  const result = `${prefix}${slice}`
+
+  return (prefix || hasAnsi(slice)) ? `${result}${ANSI_RESET}` : result
+}
+
+function visibleSlice(text: string, start: number, end = visibleLength(text)): string {
+  if (start <= 0 && end >= visibleLength(text)) return text
+  if (!hasAnsi(text)) return text.slice(start, end)
+  return styledSlice(text, buildCharMap(text), start, end)
 }
 
 export function wrapText(text: string, width: number): string[] {
@@ -505,9 +602,7 @@ export function wrapText(text: string, width: number): string[] {
   }
 
   // No ANSI? Just slice plain text
-  const hasAnsi = ANSI_RE.test(text)
-  ANSI_RE.lastIndex = 0
-  if (!hasAnsi) {
+  if (!hasAnsi(text)) {
     const lines: string[] = []
     for (let i = 0; i < breaks.length - 1; i++) {
       lines.push(plain.slice(breaks[i], breaks[i + 1]).trim())
