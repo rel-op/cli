@@ -179,6 +179,46 @@ describe('logging helpers', () => {
       expect(output).toContain('VeryLongKeyName:')
       expect(output).toContain('val')
     })
+
+    it('should preserve dimmed multiline values with leading whitespace', () => {
+      const origColumns = process.stdout.columns
+      Object.defineProperty(process.stdout, 'columns', { value: 80, writable: true, configurable: true })
+
+      try {
+        keyValue(
+          'Instructions',
+          '\x1b[2mFor this project:\n   (consensus), climbing-growth only (emerging attention), or climbing with declining activity.\x1b[22m',
+          20,
+        )
+      } finally {
+        Object.defineProperty(process.stdout, 'columns', { value: origColumns, writable: true, configurable: true })
+      }
+
+      const output = mockLog.mock.calls.map((call) => stripAnsi(call[0] as string)).join('\n')
+      expect(output).toContain('For this project:')
+      expect(output).toContain('   (consensus), climbing-growth only')
+      expect(output).not.toContain('m   (consensus)')
+      expect(output).not.toContain('2m')
+    })
+
+    it('should keep styles active on wrapped continuation lines', () => {
+      const origColumns = process.stdout.columns
+      Object.defineProperty(process.stdout, 'columns', { value: 56, writable: true, configurable: true })
+
+      try {
+        keyValue(
+          'Instructions',
+          '\x1b[2malpha beta gamma delta epsilon zeta eta theta iota kappa\x1b[22m',
+          20,
+        )
+      } finally {
+        Object.defineProperty(process.stdout, 'columns', { value: origColumns, writable: true, configurable: true })
+      }
+
+      const rawLines = mockLog.mock.calls.map((call) => call[0] as string)
+      expect(rawLines.length).toBeGreaterThan(1)
+      expect(rawLines.slice(1).every((line) => line.includes('\x1b[2m'))).toBe(true)
+    })
   })
 
   describe('json', () => {
